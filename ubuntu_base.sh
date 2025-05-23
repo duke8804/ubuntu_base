@@ -10,7 +10,7 @@ read -rp "Enter DNS server: " DNS
 # Set hostname
 hostnamectl set-hostname "$HOSTNAME"
 
-# Configure static IP (assumes netplan with eth0)
+# Create netplan config (do not apply yet)
 cat <<EOF > /etc/netplan/01-netcfg.yaml
 network:
   version: 2
@@ -22,8 +22,6 @@ network:
       nameservers:
         addresses: [$DNS]
 EOF
-
-netplan apply
 
 # Update and install packages
 apt update
@@ -39,4 +37,7 @@ enabled = true
 EOF
 systemctl restart fail2ban
 
-echo "Setup complete."
+# Apply static IP config last
+netplan apply
+
+echo "Setup complete. IP address may have changed."
