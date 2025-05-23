@@ -10,7 +10,15 @@ read -rp "Enter DNS server: " DNS
 # Set hostname
 hostnamectl set-hostname "$HOSTNAME"
 
-# Create netplan config (do not apply yet)
+# Disable cloud-init network configuration
+touch /etc/cloud/cloud-init.disabled
+
+# Remove conflicting cloud-init netplan config
+if [ -f /etc/netplan/50-cloud-init.yaml ]; then
+  mv /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak
+fi
+
+# Create custom netplan config
 cat <<EOF > /etc/netplan/01-netcfg.yaml
 network:
   version: 2
