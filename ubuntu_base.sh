@@ -53,7 +53,11 @@ enabled = true
 EOF
 systemctl restart fail2ban
 
+# Enable and start qemu-guest-agent
+systemctl enable qemu-guest-agent
+systemctl start qemu-guest-agent
+
 # Apply static IP config last
 netplan apply
 
-echo "Setup complete. IP address may have changed. Network adapter used: $NIC"
+echo "Setup complete. Network adapter: $NIC"
