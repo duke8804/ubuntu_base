@@ -7,6 +7,9 @@ read -rp "Enter subnet prefix (e.g., 24 for 255.255.255.0): " SUBNET
 read -rp "Enter gateway: " GATEWAY
 read -rp "Enter DNS server: " DNS
 
+# Detect primary network interface
+NIC=$(ip route | awk '/default/ {print $5}' | head -n1)
+
 # Set hostname
 hostnamectl set-hostname "$HOSTNAME"
 
@@ -23,7 +26,7 @@ cat <<EOF > /etc/netplan/01-netcfg.yaml
 network:
   version: 2
   ethernets:
-    eth0:
+    $NIC:
       dhcp4: no
       addresses: [$IPADDR/$SUBNET]
       nameservers:
@@ -53,4 +56,4 @@ systemctl restart fail2ban
 # Apply static IP config last
 netplan apply
 
-echo "Setup complete. IP address may have changed."
+echo "Setup complete. IP address may have changed. Network adapter used: $NIC"
