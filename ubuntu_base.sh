@@ -18,10 +18,15 @@ network:
     eth0:
       dhcp4: no
       addresses: [$IPADDR/$SUBNET]
-      gateway4: $GATEWAY
       nameservers:
         addresses: [$DNS]
+      routes:
+        - to: default
+          via: $GATEWAY
 EOF
+
+# Set secure permissions
+chmod 600 /etc/netplan/01-netcfg.yaml
 
 # Update and install packages
 apt update
