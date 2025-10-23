@@ -1,50 +1,64 @@
 #!/bin/bash
+set -e
 
-# Prompt for network details
+UPDATES=/scripts/updates.sh
+NETPLAN_FILE="/etc/netplan/01-netcfg.yaml"
+
+# Prompt for network and system info
 read -rp "Enter new hostname: " HOSTNAME
 read -rp "Enter IP address (e.g., 192.168.1.100): " IPADDR
 read -rp "Enter subnet prefix (e.g., 24 for 255.255.255.0): " SUBNET
 read -rp "Enter gateway: " GATEWAY
-read -rp "Enter DNS server: " DNS
+read -rp "Enter DNS server 1: " DNS1
+read -rp "Enter DNS server 2: " DNS2
+read -sp "Enter new password for user 'revel': " PASSWORD; echo
 
-# Detect primary network interface
+# Detect interface
 NIC=$(ip route | awk '/default/ {print $5}' | head -n1)
 
-# Set hostname
+# Hostname setup
 hostnamectl set-hostname "$HOSTNAME"
 
-# Disable cloud-init network configuration
-touch /etc/cloud/cloud-init.disabled && rm -rf /etc/netplan/50-cloud-init.yaml
+# Disable cloud-init network config
+touch /etc/cloud/cloud-init.disabled
+rm -f /etc/netplan/50-cloud-init.yaml
 
-# Remove conflicting cloud-init netplan config
-if [ -f /etc/netplan/50-cloud-init.yaml ]; then
-  mv /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml.bak
-fi
-
-# Create custom netplan config
-cat <<EOF > /etc/netplan/01-netcfg.yaml
+# Create static netplan config
+cat <<EOF > "$NETPLAN_FILE"
 network:
   version: 2
+  renderer: networkd
   ethernets:
     $NIC:
       dhcp4: no
       addresses: [$IPADDR/$SUBNET]
       nameservers:
-        addresses: [$DNS]
+        addresses: [$DNS1, $DNS2]
       routes:
         - to: default
           via: $GATEWAY
 EOF
 
-# Set secure permissions
-chmod 600 /etc/netplan/01-netcfg.yaml
+chmod 600 "$NETPLAN_FILE"
+netplan apply
 
-# Update and install packages
+# Update /etc/hosts
+if ! grep -q "$HOSTNAME" /etc/hosts; then
+  echo "127.0.1.1 $HOSTNAME" >> /etc/hosts
+fi
+
+# Change password
+echo -e "$PASSWORD\n$PASSWORD" | passwd revel
+
+# Timezone
+timedatectl set-timezone America/Chicago
+
+# Package setup
 apt update
 apt install -y joe fail2ban qemu-guest-agent
 apt upgrade -y
 
-# Enable and configure fail2ban
+# Enable services
 systemctl enable fail2ban
 systemctl start fail2ban
 cat <<EOF > /etc/fail2ban/jail.d/sshd.local
@@ -52,12 +66,33 @@ cat <<EOF > /etc/fail2ban/jail.d/sshd.local
 enabled = true
 EOF
 systemctl restart fail2ban
+systemctl enable --now qemu-guest-agent || true
 
-# Enable and start qemu-guest-agent
-systemctl enable qemu-guest-agent
-systemctl start qemu-guest-agent
+# Create scripts directory
+mkdir -p /scripts/logs
 
-# Apply static IP config last
-netplan apply
+# Create updates script
+cat <<EOF > "$UPDATES"
+#!/bin/bash
+set -e
+apt clean
+apt update
+apt upgrade -y
+apt dist-upgrade -y
+apt autoremove -y
+apt autoclean -y
+if [ -f /var/run/reboot-required ]; then
+  shutdown -r now
+fi
+echo \$(date) "Updates Complete" >> /scripts/logs/updates.log
+find /scripts/logs -type f -name 'updates.log' -size +1M -delete
+EOF
+chmod +x "$UPDATES"
 
-echo "Setup complete. Network adapter: $NIC"
+# Schedule daily updates at 4 AM under root
+( sudo crontab -l 2>/dev/null; echo "0 4 * * * $UPDATES" ) | sudo crontab -
+
+# Run updates now
+"$UPDATES"
+
+echo "✅ Setup complete. Hostname: $HOSTNAME  IP: $IPADDR  NIC: $NIC"
