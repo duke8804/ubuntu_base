@@ -14,7 +14,7 @@ NIC=$(ip route | awk '/default/ {print $5}' | head -n1)
 hostnamectl set-hostname "$HOSTNAME"
 
 # Disable cloud-init network configuration
-touch /etc/cloud/cloud-init.disabled
+touch /etc/cloud/cloud-init.disabled && rm -rf /etc/netplan/50-cloud-init.yaml
 
 # Remove conflicting cloud-init netplan config
 if [ -f /etc/netplan/50-cloud-init.yaml ]; then
